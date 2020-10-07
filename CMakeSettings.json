@@ -1,0 +1,14 @@
+{
+  "configurations": [{
+    "name": "x64-Debug",
+    "generator": "Visual Studio 15 2017 Win64",
+    "configurationType" : "Debug",
+    "buildRoot":  "${env.LOCALAPPDATA}\\CMakeBuild\\${workspaceHash}\\build\\${name}",
+    "cmakeCommandArgs": "",
+    "buildCommandArgs": "-m -v:minimal",
+    "variables": [{
+      "name": "CMAKE_TOOLCHAIN_FILE",
+      "value": "C:\\Users\\jas\\Desktop\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
+    }]
+  }]
+}

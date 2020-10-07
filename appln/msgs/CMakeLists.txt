@@ -1,0 +1,34 @@
+#-----------------------------------------------------------------------------------------------
+SET(EXE_NAME msgs_sub)
+
+SET(SUB_TARGET_NAME ${EXE_NAME}-${PLATFORM}_${ARCH})
+
+SET(SUB_TARGET_SOURCES sub.cxx)
+
+ADD_EXECUTABLE(${SUB_TARGET_NAME} 
+    ${SUB_TARGET_SOURCES}
+)
+TARGET_LINK_LIBRARIES(${SUB_TARGET_NAME} msglib)
+
+TARGET_COMPILE_DEFINITIONS(${SUB_TARGET_NAME} PUBLIC NOMINMAX)
+
+SET_TARGET_PROPERTIES(${SUB_TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+#-----------------------------------------------------------------------------------------------
+
+SET(EXE_NAME msgs_pub)
+
+SET(PUB_TARGET_NAME ${EXE_NAME}-${PLATFORM}_${ARCH})
+
+SET(PUB_TARGET_SOURCES pub.cxx)
+
+ADD_EXECUTABLE(${PUB_TARGET_NAME} 
+    ${PUB_TARGET_SOURCES}
+)
+TARGET_LINK_LIBRARIES(${PUB_TARGET_NAME} msglib)
+
+TARGET_COMPILE_DEFINITIONS(${PUB_TARGET_NAME} PUBLIC NOMINMAX)
+
+SET_TARGET_PROPERTIES(${PUB_TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+#-----------------------------------------------------------------------------------------------
