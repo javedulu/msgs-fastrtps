@@ -22,14 +22,15 @@ int main(int argc, char **argv)
     std::shared_ptr<BigSize> m = std::make_shared<BigSize>(); // new BigSize();
 
     Transmitter<BigSize> t("BigSizeTopic"); 
+    t.setConnParams("10.20.1.14",eConnectionMode::TCP_RTPS);
+    //t.setConnParams("10.20.1.24",eConnectionMode::UDP_RTPS);
+    //t.setConnParams("",eConnectionMode::SHARED_MEMORY);
     t.init();
-    std::vector<uint8_t> fdata;
-    for (int j=0;j<1000; j++)
+    for (int j=0;j<10; j++)
     {
-        //fdata.push_back(std::to_string(j)[0]);
+        //m->fdata().push_back(std::to_string(j)[0]);
         m->fData().push_back(0);
     }
-    //m->fData(fdata);
     //t.init("10.20.1.24", 5100, false, whitelist);
     std::cout<<"Sending sample @ 1000msec - 10 samples"<< std::endl;
     t.run();

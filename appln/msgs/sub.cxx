@@ -21,6 +21,9 @@ int main(int argc , char **argv)
     std::vector<std::string> whitelist;
     Log::SetVerbosity(Log::Info);
     Receiver<BigSize> r("BigSizeTopic"); //= new Receiver<BigSize>("BigSizeTopic");
+    r.setConnParams("10.20.1.14",eConnectionMode::TCP_RTPS);
+    //r.setConnParams("10.20.1.24",eConnectionMode::UDP_RTPS);
+    //r.setConnParams("",eConnectionMode::SHARED_MEMORY);
     r.init();
     //r.init("10.20.1.24", 5100, false, whitelist);
     r.receive(fp);

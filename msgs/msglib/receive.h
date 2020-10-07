@@ -16,12 +16,15 @@
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 #include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
 #include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
 #include <fastrtps/utils/IPLocator.h>
 
 #include "demangle.hxx"
 #include "messagetype.h"
+#include "msgconfig.h"
 #include <functional>
 
+using namespace eprosima::fastdds::rtps;
 
 template<typename messageType>
 class SubListener: public eprosima::fastdds::dds::DataReaderListener
@@ -59,11 +62,7 @@ public:
     bool init();
     void run();
     void receive(std::function<void(messageType)> x);
-    bool init(
-        const std::string& wan_ip,
-        unsigned short port,
-        bool use_tls,
-        const std::vector<std::string>& whitelist);
+    void setConnParams(std::string wan_ip, eConnectionMode mode = eConnectionMode::TCP_RTPS, unsigned short port=4242 );
 private:
     eprosima::fastdds::dds::DomainParticipant* participant_;
     eprosima::fastdds::dds::Subscriber* subscriber_;
@@ -74,8 +73,20 @@ private:
 private:
     std::string topicname_;
     int domainID = 16;
+    unsigned short port = 4242;
+    eConnectionMode eConnMode = eConnectionMode::SHARED_MEMORY;
+    std::string wan_ip;
+    std::vector<std::string> whitelist;
 };
 
+
+template <typename messageType>
+inline void Receiver<messageType>::setConnParams(std::string wan_ip, eConnectionMode mode , unsigned short port)
+{
+    this->wan_ip = wan_ip;
+    this->eConnMode = mode;
+    this->port=port;
+}
 
 template <typename messageType>
 inline Receiver<messageType>::Receiver(std::string topicname)
@@ -112,16 +123,98 @@ inline Receiver<messageType>::~Receiver()
 template <typename messageType>
 inline bool Receiver<messageType>::init()
 {
+    std::cout<<"Initializing Subscriber with "<< enum2str<eConnectionMode>(this->eConnMode) << " @ " << this->wan_ip << ":" << this->port <<" DomainID "<< this->domainID<<std::endl;
     //CREATE THE PARTICIPANT
     eprosima::fastdds::dds::DomainParticipantQos pqos;
+    pqos.wire_protocol().builtin.discovery_config.leaseDuration = eprosima::fastrtps::c_TimeInfinite;
+    /*
+    pqos.wire_protocol().builtin.discovery_config.discoveryProtocol = DiscoveryProtocol_t::SIMPLE;
+    pqos.wire_protocol().builtin.discovery_config.use_SIMPLE_EndpointDiscoveryProtocol = true;
+    pqos.wire_protocol().builtin.discovery_config.m_simpleEDP.use_PublicationReaderANDSubscriptionWriter = true;
+    pqos.wire_protocol().builtin.discovery_config.m_simpleEDP.use_PublicationWriterANDSubscriptionReader = true;
+    */
     pqos.name("Domain_sub");
-    std::shared_ptr<eprosima::fastdds::rtps::UDPv4TransportDescriptor> udpv4descriptor = 
-                                    std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>();
-    udpv4descriptor->sendBufferSize = 65536;
-    udpv4descriptor->receiveBufferSize = 65536;
-    //TODO: To add initial_peer list , white list and wan address similar to TCP
-    pqos.transport().user_transports.push_back(udpv4descriptor);
-    pqos.transport().use_builtin_transports = false; //Custom UDP
+
+    switch (eConnMode)
+    {
+        case eConnectionMode::SHARED_MEMORY:
+        {                
+            std::shared_ptr<SharedMemTransportDescriptor> shmemdescriptor = std::make_shared<SharedMemTransportDescriptor>();
+            shmemdescriptor->segment_size(2*9*1024*1024); // Twice of 9MB
+            pqos.transport().user_transports.push_back(shmemdescriptor);
+        }
+        break;
+        case  eConnectionMode::UDP_RTPS:
+        {
+            std::shared_ptr<UDPv4TransportDescriptor> udpv4descriptor = std::make_shared<UDPv4TransportDescriptor>();
+            udpv4descriptor->sendBufferSize = 65536;
+            udpv4descriptor->receiveBufferSize = 65536;
+            //TODO: To add initial_peer list , white list and wan address similar to TCP
+            for (std::string ip : whitelist)
+            {   
+                udpv4descriptor->interfaceWhiteList.push_back(ip);
+                std::cout << "Whitelisted " << ip << std::endl;
+            }   
+            if (!wan_ip.empty())
+            {
+                eprosima::fastrtps::rtps::Locator_t locator;
+                IPLocator::setIPv4(locator, wan_ip);
+                locator.port = port;
+                pqos.wire_protocol().builtin.initialPeersList.push_back(locator); // Publisher's meta channel
+                pqos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(locator);
+            }
+            pqos.transport().user_transports.push_back(udpv4descriptor);
+        }
+        break;
+        case eConnectionMode::TCP_RTPS:
+        {
+            Locator_t initial_peer_locator;
+            int32_t kind = LOCATOR_KIND_TCPv4;
+            initial_peer_locator.kind = kind;
+            initial_peer_locator.port = port;
+            if (!wan_ip.empty())
+            {   
+                IPLocator::setIPv4(initial_peer_locator, wan_ip);
+            }   
+            else
+            {   
+                IPLocator::setIPv4(initial_peer_locator, "127.0.0.1");
+            }   
+            pqos.wire_protocol().builtin.initialPeersList.push_back(initial_peer_locator); // Publisher's meta channel
+
+            std::shared_ptr<TCPv4TransportDescriptor> tcpv4descriptor = std::make_shared<TCPv4TransportDescriptor>();
+            for (std::string ip : whitelist)
+            {   
+                tcpv4descriptor->interfaceWhiteList.push_back(ip);
+                std::cout << "Whitelisted " << ip << std::endl;
+            }   
+            if (true)
+            {   
+                std::cerr<<"TLS Options still not supported"<<std::endl;
+        #if 0
+                using TLSVerifyMode = TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
+                using TLSOptions = TCPTransportDescriptor::TLSConfig::TLSOptions;
+                tcpv4descriptor->apply_security = true;
+                tcpv4descriptor->tls_config.password = "test";
+                tcpv4descriptor->tls_config.verify_file = "ca.pem";
+                tcpv4descriptor->tls_config.verify_mode = TLSVerifyMode::VERIFY_PEER;
+                tcpv4descriptor->tls_config.add_option(TLSOptions::DEFAULT_WORKAROUNDS);
+        #endif 
+            }   
+
+            tcpv4descriptor->wait_for_tcp_negotiation = false;
+            tcpv4descriptor->sendBufferSize = 8912896; // 8.5mb 
+            tcpv4descriptor->receiveBufferSize = 8912896; // 8.5mb
+            tcpv4descriptor->set_WAN_address(wan_ip);
+            tcpv4descriptor->add_listener_port(port);
+            pqos.transport().user_transports.push_back(tcpv4descriptor);
+        }
+
+        break;
+    }
+
+    pqos.transport().use_builtin_transports = false; //Custom UDP / TCP / SHARED MEMORY
+
     participant_ = eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(domainID, pqos);
     if (participant_ == nullptr)
     {   
@@ -148,19 +241,26 @@ inline bool Receiver<messageType>::init()
         return false;
     }   
 
-    //CREATE THE READER
-    eprosima::fastdds::dds::DataReaderQos rqos = eprosima::fastdds::dds::DATAREADER_QOS_DEFAULT;
+    //CREATE THE DATAREADER
+    eprosima::fastdds::dds::DataReaderQos rqos;
+    rqos.history().kind = eprosima::fastdds::dds::KEEP_LAST_HISTORY_QOS;
+    rqos.history().depth = 2;
+    rqos.resource_limits().max_samples = 5;
+    rqos.resource_limits().allocated_samples = 5;
     rqos.reliability().kind = eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS;
+    rqos.durability().kind = eprosima::fastdds::dds::TRANSIENT_LOCAL_DURABILITY_QOS;
     reader_ = subscriber_->create_datareader(topic_, rqos, &listener_);
+
     if (reader_ == nullptr)
     {   
         return false;
     }   
-    std::cout<<"Created Data Receiver with Topic [RTPS Simple Discovery Mode] "<< topicname_.c_str() << " & Type: " << TypeName<messageType>::Get() << std::endl;
+    std::cout<<"Created Data Receiver with Topic "<< topicname_.c_str() << " & Type: " << TypeName<messageType>::Get() << std::endl;
 
     return true;
 }
 
+#if 0 
 template <typename messageType>
 inline bool Receiver<messageType>::init(
         const std::string& wan_ip,
@@ -170,31 +270,6 @@ inline bool Receiver<messageType>::init(
 {
     //CREATE THE PARTICIPANT
     eprosima::fastdds::dds::DomainParticipantQos pqos;
-    int32_t kind = LOCATOR_KIND_TCPv4;
-
-    Locator_t initial_peer_locator;
-    initial_peer_locator.kind = kind;
-
-    std::shared_ptr<eprosima::fastdds::rtps::TCPv4TransportDescriptor> tcpv4descriptor = 
-                                                std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
-
-    for (std::string ip : whitelist)
-    {   
-        tcpv4descriptor->interfaceWhiteList.push_back(ip);
-        std::cout << "Whitelisted " << ip << std::endl;
-    }   
-
-    if (!wan_ip.empty())
-    {   
-        IPLocator::setIPv4(initial_peer_locator, wan_ip);
-        std::cout << wan_ip << ":" << port << std::endl;
-    }   
-    else
-    {   
-        IPLocator::setIPv4(initial_peer_locator, "127.0.0.1");
-    }   
-    initial_peer_locator.port = port;
-    pqos.wire_protocol().builtin.initialPeersList.push_back(initial_peer_locator); // Publisher's meta channel
 
     pqos.wire_protocol().builtin.discovery_config.leaseDuration = eprosima::fastrtps::c_TimeInfinite;
     //pqos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod = Duration_t(5, 0);
@@ -202,22 +277,6 @@ inline bool Receiver<messageType>::init(
 
     pqos.transport().use_builtin_transports = false;
 
-    if (use_tls)
-    {   
-        std::cerr<<"TLS Options still not supported"<<std::endl;
-#if 0
-        using TLSVerifyMode = TCPTransportDescriptor::TLSConfig::TLSVerifyMode;
-        using TLSOptions = TCPTransportDescriptor::TLSConfig::TLSOptions;
-        tcpv4descriptor->apply_security = true;
-        tcpv4descriptor->tls_config.password = "test";
-        tcpv4descriptor->tls_config.verify_file = "ca.pem";
-        tcpv4descriptor->tls_config.verify_mode = TLSVerifyMode::VERIFY_PEER;
-        tcpv4descriptor->tls_config.add_option(TLSOptions::DEFAULT_WORKAROUNDS);
-#endif 
-    }   
-
-    tcpv4descriptor->wait_for_tcp_negotiation = false;
-    pqos.transport().user_transports.push_back(tcpv4descriptor);
 
     participant_ =eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(domainID, pqos);
 
@@ -265,6 +324,8 @@ inline bool Receiver<messageType>::init(
 
     return true;
 }
+
+#endif 
 
 template <typename messageType>
 inline void SubListener<messageType>::on_subscription_matched(

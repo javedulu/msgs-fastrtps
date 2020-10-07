@@ -2,3 +2,5 @@
 #include "messagetype.h"
 #include "receive.h"
 #include "transmit.h"
+#include "enum.h"
+#include "msgconfig.h"
