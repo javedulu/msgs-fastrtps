@@ -3,15 +3,7 @@
 
 #pragma once
 
-#cmakedefine RTXRAY_USE_DEBUG_EXCEPTIONS
-
-static const int RTXRAY_USAGE_REPORT_VERBOSITY = @RTXRAY_USAGE_REPORT_VERBOSITY@;
-
-// the configured options and settings for Tutorial
-#define RTXRAY_VERSION  @RTXRAY_VERSION@
-
 #define __DIRECTORY__  "@CMAKE_BINARY_DIR@"
-#define __SCENEDIR__   "@CMAKE_SOURCE_DIR@/scenes"
 #define __REPODIR__    "@CMAKE_SOURCE_DIR@/"
 
 #endif // _CONFIG_H_
